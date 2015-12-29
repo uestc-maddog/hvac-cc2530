@@ -77,7 +77,7 @@
 
 #if defined MAKE_CRC_SHDW
 #pragma location="CRC_SHDW"
-const CODE uint16 _crcShdw = 0xe69e;
+const CODE uint16 _crcShdw = 0xffff;
 #pragma required=_crcShdw
 
 #elif !defined MT_UBL_FUNC

@@ -47,6 +47,8 @@
 #include "MT_UART.h"
 #include "OSAL_Memory.h"
 
+/* HVAC Project*/
+#include "hvac_protocol0.h"
 
 /***************************************************************************************************
  * MACROS
@@ -59,9 +61,11 @@
 #define SOP_STATE      0x00
 #define CMD_STATE1     0x01
 #define CMD_STATE2     0x02
-#define LEN_STATE      0x03
-#define DATA_STATE     0x04
-#define FCS_STATE      0x05
+#define LEN_STATE1     0x03
+#define LEN_STATE2     0x04
+#define DATA_STATE     0x05
+#define FCS_STATE      0x06
+#define FVER_STATE     0x07
 
 /***************************************************************************************************
  *                                         GLOBAL VARIABLES
@@ -72,7 +76,7 @@ byte App_TaskID;
 /* ZTool protocal parameters */
 uint8 state;
 uint8  CMD_Token[2];
-uint8  LEN_Token;
+uint16  dataLen;
 uint8  FSC_Token;
 mtOSALSerialData_t  *pMsg;
 uint8  tempDataLen;
@@ -207,24 +211,47 @@ void MT_UartProcessZToolData ( uint8 port, uint8 event )
     {
       case SOP_STATE:
         if (ch == MT_UART_SOF)
-          state = LEN_STATE;
+          state = FVER_STATE;
         break;
 
-      case LEN_STATE:
-        LEN_Token = ch;
-
+      case FVER_STATE:
+        if (ch == PTL0_FRAMEVER)
+        {  
+          // correct frame version, continue process
+          state = LEN_STATE1;
+          break;
+        }
+        else
+        {
+          // unknown frame version, reset
+          state = SOP_STATE;
+          break;
+        }
+        
+      case LEN_STATE1:
+        // assemble first bytes of data length
+        dataLen = ch;
+        dataLen <<= 8;
+        
+        state = LEN_STATE2;
+        break;       
+        
+      case LEN_STATE2:
+        // assemble second bytes of data length
+        dataLen += ch;
         tempDataLen = 0;
-
+        
         /* Allocate memory for the data */
         pMsg = (mtOSALSerialData_t *)osal_msg_allocate( sizeof ( mtOSALSerialData_t ) +
-                                                        MT_RPC_FRAME_HDR_SZ + LEN_Token );
+                                                        MT_RPC_FRAME_HDR_SZ + dataLen );
 
         if (pMsg)
         {
           /* Fill up what we can */
           pMsg->hdr.event = CMD_SERIAL_MSG;
           pMsg->msg = (uint8*)(pMsg+1);
-          pMsg->msg[MT_RPC_POS_LEN] = LEN_Token;
+          pMsg->msg[MT_RPC_POS_LEN0] = (dataLen & 0xff00);
+          pMsg->msg[MT_RPC_POS_LEN1] = (dataLen & 0x00ff);
           state = CMD_STATE1;
         }
         else
@@ -242,13 +269,19 @@ void MT_UartProcessZToolData ( uint8 port, uint8 event )
       case CMD_STATE2:
         pMsg->msg[MT_RPC_POS_CMD1] = ch;
         /* If there is no data, skip to FCS state */
-        if (LEN_Token)
+        if (dataLen)
         {
           state = DATA_STATE;
         }
         else
         {
-          state = FCS_STATE;
+          // currently no FCS, reset and finish    
+          //state = FCS_STATE;
+          
+          // Finish Process
+          osal_msg_send( App_TaskID, (byte *)pMsg );
+          
+          state = SOP_STATE;
         }
         break;
 
@@ -261,20 +294,28 @@ void MT_UartProcessZToolData ( uint8 port, uint8 event )
         bytesInRxBuffer = Hal_UART_RxBufLen(port);
 
         /* If the remain of the data is there, read them all, otherwise, just read enough */
-        if (bytesInRxBuffer <= LEN_Token - tempDataLen)
+        if (bytesInRxBuffer <= dataLen - tempDataLen)
         {
           HalUARTRead (port, &pMsg->msg[MT_RPC_FRAME_HDR_SZ + tempDataLen], bytesInRxBuffer);
           tempDataLen += bytesInRxBuffer;
         }
         else
         {
-          HalUARTRead (port, &pMsg->msg[MT_RPC_FRAME_HDR_SZ + tempDataLen], LEN_Token - tempDataLen);
-          tempDataLen += (LEN_Token - tempDataLen);
+          HalUARTRead (port, &pMsg->msg[MT_RPC_FRAME_HDR_SZ + tempDataLen], dataLen - tempDataLen);
+          tempDataLen += (dataLen - tempDataLen);
         }
 
         /* If number of bytes read is equal to data length, time to move on to FCS */
-        if ( tempDataLen == LEN_Token )
-            state = FCS_STATE;
+        // version one, no FCS, receive finish.
+        if ( tempDataLen == dataLen )
+        {
+          // currently no FCS, reset and finish    
+          //state = FCS_STATE;
+          state = SOP_STATE;
+          
+          // Finish process
+          osal_msg_send( App_TaskID, (byte *)pMsg );
+        }
 
         break;
 
@@ -283,7 +324,7 @@ void MT_UartProcessZToolData ( uint8 port, uint8 event )
         FSC_Token = ch;
 
         /* Make sure it's correct */
-        if ((MT_UartCalcFCS ((uint8*)&pMsg->msg[0], MT_RPC_FRAME_HDR_SZ + LEN_Token) == FSC_Token))
+        if ((MT_UartCalcFCS ((uint8*)&pMsg->msg[0], MT_RPC_FRAME_HDR_SZ + dataLen) == FSC_Token))
         {
           osal_msg_send( App_TaskID, (byte *)pMsg );
         }

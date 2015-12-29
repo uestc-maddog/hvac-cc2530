@@ -54,8 +54,8 @@ extern "C" {
  * CONSTANTS
  ***************************************************************************************************/
 
-/* 1st byte is the length of the data field, 2nd/3rd bytes are command field. */
-#define MT_RPC_FRAME_HDR_SZ   3
+/* 1st/2nd byte is the length of the data field, 3rd/4th bytes are command field. */
+#define MT_RPC_FRAME_HDR_SZ   4
 
 /* Maximum length of data in the general frame format. The upper limit is 255 because of the
  * 1-byte length protocol. But the operation limit is lower for code size and ram savings so that
@@ -71,10 +71,12 @@ extern "C" {
 #define MT_RPC_SUBSYSTEM_MASK 0x1F
 
 /* position of fields in the general format frame */
-#define MT_RPC_POS_LEN        0
-#define MT_RPC_POS_CMD0       1
-#define MT_RPC_POS_CMD1       2
-#define MT_RPC_POS_DAT0       3
+#define MT_RPC_POS_LEN        0         
+#define MT_RPC_POS_LEN0       0
+#define MT_RPC_POS_LEN1       1  
+#define MT_RPC_POS_CMD0       2
+#define MT_RPC_POS_CMD1       3
+#define MT_RPC_POS_DAT0       4
 
 /* Error codes */
 #define MT_RPC_SUCCESS        0     /* success */
