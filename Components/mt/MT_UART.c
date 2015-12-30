@@ -200,7 +200,7 @@ void MT_UartProcessZToolData ( uint8 port, uint8 event )
 {
   uint8  ch;
   uint8  bytesInRxBuffer;
-  
+
   (void)event;  // Intentionally unreferenced parameter
 
   while (Hal_UART_RxBufLen(port))
@@ -225,7 +225,10 @@ void MT_UartProcessZToolData ( uint8 port, uint8 event )
         {
           // unknown frame version, reset
           state = SOP_STATE;
-          break;
+          // flush RX buffer
+          while (Hal_UART_RxBufLen(port))
+            HalUARTRead (port, &ch, 1);
+          return;
         }
         
       case LEN_STATE1:
@@ -256,7 +259,10 @@ void MT_UartProcessZToolData ( uint8 port, uint8 event )
         }
         else
         {
+          // error, flush
           state = SOP_STATE;
+          while (Hal_UART_RxBufLen(port))
+            HalUARTRead (port, &ch, 1);
           return;
         }
         break;
@@ -336,12 +342,17 @@ void MT_UartProcessZToolData ( uint8 port, uint8 event )
 
         /* Reset the state, send or discard the buffers at this point */
         state = SOP_STATE;
-
         break;
 
       default:
        break;
     }
+  }
+  
+  // incoming frame has problem, flash rx, reset
+  if (state != SOP_STATE)
+  {
+    state = SOP_STATE;
   }
 }
 

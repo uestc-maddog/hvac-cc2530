@@ -171,7 +171,7 @@ extern uint8 aExtendedAddress[8];
 #define MT_UART_TX_BUFF_MAX  128
 #define MT_UART_RX_BUFF_MAX  128
 #define MT_UART_THRESHOLD   (MT_UART_RX_BUFF_MAX / 2)
-#define MT_UART_IDLE_TIMEOUT 6
+#define MT_UART_IDLE_TIMEOUT 3
 
 // Restart system from absolute beginning
 // Disables interrupts, forces WatchDog reset
